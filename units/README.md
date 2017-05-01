@@ -23,5 +23,5 @@ See [godoc](https://godoc.org/xojoc.pw/nlp/units) for the complete documentation
 # [Donate!](https://liberapay.com/xojoc)
 
 # License
-*bitset* is [Free Software](https://www.gnu.org/philosophy/free-sw.html) and under the Apache 2.0 license. No warranty.
+*units* is [Free Software](https://www.gnu.org/philosophy/free-sw.html) and under the Apache 2.0 license. No warranty.
 
