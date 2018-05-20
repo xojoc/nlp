@@ -1,0 +1,75 @@
+package porter2
+
+import "unicode/utf8"
+
+// http://snowballstem.org/texts/r1r2.html
+
+func r1(s []byte) []byte {
+	for len(s) > 0 && isConsonant(rune(s[0])) {
+		s = s[1:]
+	}
+	for {
+		r, l := utf8.DecodeRune(s)
+		if r == utf8.RuneError {
+			return s
+		}
+		if isVowel(r) {
+			s = s[l:]
+		} else {
+			break
+		}
+	}
+	if len(s) > 0 {
+		s = s[1:]
+	}
+	return s
+
+}
+
+func r2(s []byte) []byte {
+	return r1(r1(s))
+}
+
+func rv(s []byte) []byte {
+	r1, l := utf8.DecodeRune(s)
+	s = s[l:]
+	r2, l := utf8.DecodeRune(s)
+	if r2 == utf8.RuneError {
+		return s[len(s):]
+	}
+	s = s[l:]
+
+	if isConsonant(r2) {
+		for {
+			r, l := utf8.DecodeRune(s)
+			if l == 0 {
+				break
+			}
+			s = s[l:]
+			if isVowel(r) {
+				break
+			}
+		}
+		return s
+	}
+
+	if isVowel(r1) && isVowel(r2) {
+		for {
+			r, l := utf8.DecodeRune(s)
+			if l == 0 {
+				break
+			}
+			s = s[l:]
+			if isConsonant(r) {
+				break
+			}
+		}
+		return s
+	}
+
+	_, l = utf8.DecodeRune(s)
+	return s[l:]
+}
+func R1(vowels string) func([]byte) []byte {
+
+}

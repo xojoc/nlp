@@ -1,0 +1,8 @@
+panic: runtime error: index out of range
+panic
+gitlab.com/gonlp/stem/internal/porter2.Step.Apply
+gitlab.com/gonlp/stem/porter2english.step1a
+gitlab.com/gonlp/stem/porter2english.StemBytes
+gitlab.com/gonlp/stem/porter2english.Fuzz
+go-fuzz-dep.Main
+main.main

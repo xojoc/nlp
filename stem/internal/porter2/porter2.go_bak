@@ -1,0 +1,274 @@
+// Code common to all porter2 algorithms.
+
+package porter2
+
+import (
+	"bytes"
+	"fmt"
+	"sort"
+	"strings"
+)
+
+const maxSuffixLength = 7
+
+type node struct {
+	leafs          [255]*node
+	suffixCallback *action
+}
+
+func insertSuffix(n *node, x []byte, cb *action) *node {
+	if n == nil {
+		n = &node{}
+	}
+	if len(x) == 0 {
+		n.suffixCallback = cb
+	} else {
+		n.leafs[x[0]] = insertSuffix(n.leafs[x[0]], x[1:], cb)
+	}
+	return n
+}
+
+func newTrie(suffixes []*action) *node {
+	root := &node{}
+	for _, cb := range suffixes {
+		root = insertSuffix(root, cb.Suffix, cb)
+	}
+	return root
+}
+
+func getSuffix(n *node, x []byte) *action {
+	if n == nil {
+		return nil
+	}
+	if len(x) == 0 {
+		return n.suffixCallback
+	}
+	return getSuffix(n.leafs[x[0]], x[1:])
+}
+
+/*
+
+func HasSuffix(s []byte, suffix string) bool {
+	if len(s) < len(suffix) {
+		return false
+	}
+	d := len(s) - len(suffix)
+	for i := 0; i < len(suffix); i++ {
+		if s[d+i] != suffix[i] {
+			return false
+		}
+	}
+	return true
+}
+*/
+
+type SuffixCallback struct {
+	Suffixes string
+	Callback func([]byte, []byte) []byte
+	//	MatchRegion     func([]byte) []byte
+	ActionRegion    func([]byte) []byte
+	SuffixCallbacks []SuffixCallback
+}
+
+type action struct {
+	Suffix   []byte
+	Callback func([]byte, []byte) []byte
+	//	MatchRegion     func([]byte) []byte
+	ActionRegion    func([]byte) []byte
+	SuffixCallbacks []*action
+}
+
+type byLength []*action
+
+func (s byLength) Len() int {
+	return len(s)
+}
+
+func (s byLength) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+func (s byLength) Less(i, j int) bool {
+	return len(s[i].Suffix) > len(s[j].Suffix)
+}
+
+type Step struct {
+	suffixCallbacks []*action
+	suffixes        *node
+}
+
+func NewStep(suffixCallbacks []SuffixCallback) Step {
+	s := Step{}
+	for _, x := range suffixCallbacks {
+		suffixes := strings.Fields(x.Suffixes)
+		for _, f := range suffixes {
+			c := action{[]byte(f), x.Callback, x.ActionRegion, nil}
+			s.suffixCallbacks = append(s.suffixCallbacks, &c)
+
+		}
+	}
+	sort.Sort(byLength(s.suffixCallbacks))
+	s.suffixes = newTrie(s.suffixCallbacks)
+	if len(s.suffixCallbacks[0].Suffix) > maxSuffixLength {
+		panic(fmt.Sprintf("suffix %q longer than %d", s.suffixCallbacks[0].Suffix, maxSuffixLength))
+	}
+	return s
+}
+
+func (s Step) Apply(str []byte) []byte { // return true if changed?
+	maxLen := len(s.suffixCallbacks[0].Suffix)
+	minLen := len(s.suffixCallbacks[len(s.suffixCallbacks)-1].Suffix)
+	if len(str) <= minLen {
+		return str
+	}
+	i := len(str) - maxLen
+	if i < 0 {
+		i = 0
+	}
+	nodes := [maxSuffixLength]*node{}
+	for ni := 0; ni < len(str)-i; ni++ {
+		nodes[ni] = s.suffixes
+	}
+
+	for {
+		j := 0
+		for si := i; si < len(str); si++ {
+			if nodes[j] != nil {
+				nodes[j] = nodes[j].leafs[str[si]]
+			}
+			j++
+		}
+		i++
+		if i == len(str) {
+			break
+		}
+	}
+
+	/*
+		starti := i
+			for ; i < len(str); i++ {
+				for j := 0; j <= i-starti; j++ {
+					if nodes[j] != nil {
+						nodes[j] = nodes[j].leafs[str[i]]
+					}
+				}
+			}
+	*/
+
+	var suffix *action
+	for ni := 0; ni < len(nodes); ni++ {
+		if nodes[ni] != nil && nodes[ni].suffixCallback != nil {
+			suffix = nodes[ni].suffixCallback
+			break
+		}
+	}
+	if suffix == nil {
+		return str
+	}
+
+	if suffix.ActionRegion == nil {
+		return applyCB(str, suffix)
+	} else {
+		if bytes.HasSuffix(suffix.ActionRegion(str), suffix.Suffix) {
+			return applyCB(str, suffix)
+		} else {
+			return str
+		}
+	}
+	panic("unreachable")
+
+	/*
+		maxLen := len(s.suffixCallbacks[0].Suffix)
+		minLen := len(s.suffixCallbacks[len(s.suffixCallbacks)-1].Suffix)
+
+		if len(str) <= minLen {
+			return str
+		}
+		i := len(str) - maxLen
+		if i < 0 {
+			i = 0
+		}
+
+		var suffix *SuffixCallback
+
+		for ; i <= len(str)-minLen; i++ {
+			suffix = getSuffix(s.suffixes, str[i:])
+			if suffix != nil {
+				break
+			}
+		}
+		if suffix == nil {
+			return str
+		}
+
+		if suffix.ActionRegion == nil {
+			return applyCB(str, suffix)
+		} else {
+			if HasSuffix(suffix.ActionRegion(str), suffix.Suffix) {
+				return applyCB(str, suffix)
+			} else {
+				return str
+			}
+		}
+		panic("unreachable")
+	*/
+	//	return LongestSuffix(str, s.suffixCallbacks)
+}
+
+func applyCB(s []byte, suffix *action) []byte {
+	s = suffix.Callback(s, suffix.Suffix)
+	/*
+		if suffix.SuffixCallbacks != nil {
+			return LongestSuffix(s, suffix.SuffixCallbacks)
+		}
+	*/
+	return s
+}
+
+func equal(s []byte, i int, x string, j int) bool {
+	if i < 0 {
+		return false
+	}
+	if j > len(x) {
+		return true
+	}
+	return false
+}
+
+/*
+func LongestSuffix(s []byte, suffixes []*SuffixCallback) []byte {
+
+	for _, suffix := range suffixes {
+		if HasSuffix(s, suffix.Suffix) {
+			if suffix.ActionRegion == nil {
+				return applyCB(s, suffix)
+			} else {
+				if HasSuffix(suffix.ActionRegion(s), suffix.Suffix) {
+					return applyCB(s, suffix)
+				} else {
+					return s
+				}
+			}
+			panic("unreachable")
+		}
+	}
+	return s
+}
+*/
+
+func Delete(s []byte, suffix []byte) []byte {
+	return s[:len(s)-len(suffix)]
+}
+
+func Truncate(to string) func([]byte, []byte) []byte {
+	return func(s []byte, suffix []byte) []byte {
+		return s[:len(s)-len(suffix)+len(to)]
+	}
+}
+
+func Replace(by string) func(s []byte, suffix []byte) []byte {
+	return func(s []byte, suffix []byte) []byte {
+		s = s[:len(s)-len(suffix)]
+		return append(s, by...)
+	}
+}
